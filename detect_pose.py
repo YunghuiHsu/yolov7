@@ -1,3 +1,4 @@
+
 import argparse
 import time
 from pathlib import Path
@@ -5,15 +6,17 @@ from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
+import numpy as np
 from numpy import random
 
-from models.experimental import attempt_load
-from utils.datasets import LoadStreams, LoadImages
-from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
-    scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path
-from utils.plots import plot_one_box
-from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
 
+from models.experimental import attempt_load
+from utils.datasets import LoadStreams, LoadImages, letterbox
+from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
+    scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path,  non_max_suppression_kpt
+from utils.plots import plot_one_box, output_to_keypoint, plot_skeleton_kpts
+from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
+ 
 
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
@@ -34,7 +37,6 @@ def detect(save_img=False):
     model = attempt_load(weights, map_location=device)  # load FP32 model
     stride = int(model.stride.max())  # model stride
     imgsz = check_img_size(imgsz, s=stride)  # check img_size
-
     if trace:
         model = TracedModel(model, device, opt.img_size)
 
@@ -68,6 +70,11 @@ def detect(save_img=False):
 
     t0 = time.time()
     for path, img, im0s, vid_cap in dataset:
+        if "pose" in weights[0]:  # pose model
+            img = np.squeeze(img)
+            img = img.transpose(1, 2, 0)  # (c, h, w) > (h, w, c) 
+            img = letterbox(img, imgsz, stride=stride, auto=True)[0] # shape: (h, w, c). w = imgsz
+            img = img.transpose(2, 0, 1) # (h, w, c) > (c, h, w)
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -85,11 +92,16 @@ def detect(save_img=False):
         # Inference
         t1 = time_synchronized()
         with torch.no_grad():   # Calculating gradients would cause a GPU memory leak
-            pred = model(img, augment=opt.augment)[0]
+            pred = model(img, augment=opt.augment)[0].detach()
+
         t2 = time_synchronized()
 
         # Apply NMS
-        pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
+        if "pose" in weights[0]:   # pose model
+            output = non_max_suppression_kpt(pred[0], opt.conf_thres, opt.iou_thres, nc=model.yaml['nc'], nkpt=model.yaml['nkpt'], kpt_label=True)
+            output = output_to_keypoint(output)
+        else: # detection model
+            pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
         t3 = time_synchronized()
 
         # Apply Classifier
@@ -106,8 +118,10 @@ def detect(save_img=False):
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # img.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
-            gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-            if len(det):
+            
+            
+            if len(det) and (not "pose" in weights[0]): #  excute object detection 
+                gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
@@ -127,9 +141,23 @@ def detect(save_img=False):
                     if save_img or view_img:  # Add bbox to image
                         label = f'{names[int(cls)]} {conf:.2f}'
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
-
+            
+            elif len(det) and ("pose" in weights[0]): #  excute pose estimation 
+                for idx in range(output.shape[0]):
+                    # Rescale keypoints from img_size to im0 size
+                    conf_temp = output[idx, 9::3].copy()
+                    ratio_ =  im0.shape[1] / old_img_w  
+                    output[idx, 7:] = (output[idx, 7:] * ratio_).round()
+                    output[idx, 9::3] = conf_temp
+                    plot_skeleton_kpts(im0, output[idx, 7:].T, 3)
+            t4 = time_synchronized()
+            
             # Print time (inference + NMS)
-            print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
+            time_process = f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (t4 - t3)):.1f}ms) Plot'
+            time_process += f' | FPS : { 1/(t4-t1): .1f} , Latency : {1E3 * (t4-t1):.1f}ms'
+            print(time_process)
+            
+ 
 
             # Stream results
             if view_img:
