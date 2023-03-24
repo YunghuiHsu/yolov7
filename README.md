@@ -11,12 +11,17 @@ See [keypoint.ipynb](https://github.com/WongKinYiu/yolov7/blob/main/tools/keypoi
     </a>
 </div>
 
-
 Add support for "pose estimation" from the official YOLOv7 repository, can simply load ` yolov7-w6-pose.pt` weights directly into the Pytorch environment for pedestrian skeleton detection
 
 `detect_pose.py` modified from `detect.py`, adding support for "pose estimation" to the original `detect.py` architecture, without modifying, adding any `utils` files. Directly download and ready to use
 
 For environment setup and package installation, please refer to the official YOLOv7 repository
+
+從YOLOv7官方倉庫中增加對 "人體姿勢估計 "的支持，可以簡單地將`yolov7-w6-pos.pt`權重直接加載到Pytorch環境中進行行人骨架檢測
+
+`detect_pose.py`修改自`detect.py`，在原`detect.py`架構中加入了對 "姿勢估計 "的支持，沒有修改、添加任何`utils`文件。直接下載並可直接使用
+
+關於環境設置和包的安裝，請參考YOLOv7的官方資源庫
 
 
 ###  Inference for Pose estimation
