@@ -70,11 +70,6 @@ def detect(save_img=False):
 
     t0 = time.time()
     for path, img, im0s, vid_cap in dataset:
-        if "pose" in weights[0]:  # pose model
-            img = np.squeeze(img)
-            img = img.transpose(1, 2, 0)  # (c, h, w) > (h, w, c) 
-            img = letterbox(img, imgsz, stride=stride, auto=True)[0] # shape: (h, w, c). w = imgsz
-            img = img.transpose(2, 0, 1) # (h, w, c) > (c, h, w)
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -98,7 +93,7 @@ def detect(save_img=False):
 
         # Apply NMS
         if "pose" in weights[0]:   # pose model
-            output = non_max_suppression_kpt(pred[0], opt.conf_thres, opt.iou_thres, nc=model.yaml['nc'], nkpt=model.yaml['nkpt'], kpt_label=True)
+            output = non_max_suppression_kpt(pred, opt.conf_thres, opt.iou_thres, nc=model.yaml['nc'], nkpt=model.yaml['nkpt'], kpt_label=True)
             output = output_to_keypoint(output)
         else: # detection model
             pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
@@ -142,13 +137,9 @@ def detect(save_img=False):
                         label = f'{names[int(cls)]} {conf:.2f}'
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
             
-            elif len(det) and ("pose" in weights[0]): #  excute pose estimation 
+            elif len(det) and ("pose" in weights[0]): #  excute pose estimation                 
+                im0 = letterbox(im0, imgsz, stride=stride, auto=True)[0] 
                 for idx in range(output.shape[0]):
-                    # Rescale keypoints from img_size to im0 size
-                    conf_temp = output[idx, 9::3].copy()
-                    ratio_ =  im0.shape[1] / old_img_w  
-                    output[idx, 7:] = (output[idx, 7:] * ratio_).round()
-                    output[idx, 9::3] = conf_temp
                     plot_skeleton_kpts(im0, output[idx, 7:].T, 3)
             t4 = time_synchronized()
             
@@ -157,8 +148,6 @@ def detect(save_img=False):
             time_process += f' | FPS : { 1/(t4-t1): .1f} , Latency : {1E3 * (t4-t1):.1f}ms'
             print(time_process)
             
- 
-
             # Stream results
             if view_img:
                 cv2.imshow(str(p), im0)
@@ -176,8 +165,10 @@ def detect(save_img=False):
                             vid_writer.release()  # release previous video writer
                         if vid_cap:  # video
                             fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                            w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                            h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                            # w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                            # h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                            w = im0.shape[1]
+                            h = im0.shape[0]
                         else:  # stream
                             fps, w, h = 30, im0.shape[1], im0.shape[0]
                             save_path += '.mp4'
