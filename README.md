@@ -57,6 +57,7 @@ python detect_pose.py --weights yolov7-w6-pose.pt --conf 0.25 --iou-thres 0.65 -
         <img src="./figure/Upside_ Down_Dancer_01.jpg" width=400x/>
     </a>
 </div>
+
 ## Citation
 
 ```
