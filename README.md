@@ -21,7 +21,7 @@ For environment setup and package installation, please refer to the official YOL
 
 `detect_pose.py`修改自`detect.py`，在原`detect.py`架構中加入了對 "姿勢估計 "的支持，沒有修改、添加任何`utils`文件。直接下載並可直接使用
 
-關於環境設置和包的安裝，請參考YOLOv7的官方資源庫
+關於環境設置和安裝，請參考YOLOv7的官方資源庫
 
 
 ###  Inference for Pose estimation
