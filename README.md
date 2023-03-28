@@ -42,8 +42,21 @@ python detect_pose.py --weights yolov7-w6-pose.pt --conf 0.25 --iou-thres 0.65 -
 python detect_pose.py --weights yolov7-w6-pose.pt --conf 0.25 --iou-thres 0.65 --img-size 640 --source 0 --no-trace
 ```
 
+#### Test
 
+- Crowded multi-person scenes
+<div align="center">
+    <a href="./">
+        <img src="./figure/Crowded_people_on_the_train.jpg" width=400x/>
+    </a>
+</div>
 
+- Upside-down human posture
+<div align="center">
+    <a href="./">
+        <img src="./figure/Upside_ Down_Dancer_01.jpg" width=400x/>
+    </a>
+</div>
 ## Citation
 
 ```
