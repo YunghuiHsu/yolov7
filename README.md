@@ -54,7 +54,7 @@ python detect_pose.py --weights yolov7-w6-pose.pt --conf 0.25 --iou-thres 0.65 -
 - Upside-down human posture
 <div align="center">
     <a href="./">
-        <img src="./figure/Upside_ Down_Dancer_01.jpg" width=400x/>
+        <img src="./figure/Upside_Down_Dancer_01.jpg" width=400x/>
     </a>
 </div>
 ## Citation
