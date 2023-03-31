@@ -1,24 +1,61 @@
 
 import argparse
+import os
+import datetime
 import time
 from pathlib import Path
 
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
-import numpy as np
 from numpy import random
-
+import numpy as np
+import pandas as pd
+from jtop import jtop
 
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages, letterbox
 from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
-    scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path,  non_max_suppression_kpt
+    scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path,  non_max_suppression_kpt, save_summary, get_jetson_information
 from utils.plots import plot_one_box, output_to_keypoint, plot_skeleton_kpts
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
- 
+from utils.logging import get_jetson_information, save_summary 
+
+# Save log file
+def log_exp_metric(save_dir:str):
+    log_file = save_dir/"log_metric.txt"
+    with open(log_file, "w") as log_file:
+        log_file.write("Inference, NMS, Plot, Latency, FPS\n")
+        for i in range(len(inference_times)):
+            log_file.write(f"{inference_times[i]:.2f}, {nms_times[i]:.2f}, {plot_times[i]:.2f}, {latencies[i]:.2f}, {fps_times[i]:.2f}\n")
+
+def log_exp_summary(): 
+    # save Inference_summary
+    path_save  = Path(Path(opt.project).parent)/f'Inference_summary.csv'
+    save_data = {}
+    metric = {"Inference" : np.round(np.mean(inference_times), 2),
+              "Latency" : np.round(np.mean(latencies), 2),
+              "FPS" : np.round(np.mean(fps_times), 2),
+              "Inf_std" : np.round(np.std(inference_times), 2),
+              "Lat_std" : np.round(np.std(latencies), 2),
+              "FPS_std" : np.round(np.std(fps_times), 2),
+              "Initiate_time" : np.round(initiate_times[0], 2)
+              }
+    save_data.update(metric)
+    save_data.update(jetson_information)
+    save_data.update(vars(opt))
+    save_data["date"] = start_time
+
+    save_summary(save_data=save_data, path_save=path_save)
+
+    # Display mean and standard deviation of all data
+    print(f"\tInitiate_time : {metric['Initiate_time']:.2f} s")
+    print(f"\tInference: {metric['Inference']:.2f} ms")
+    print(f"\tLatency: {metric['Latency']:.2f} ms")
+    print(f"\tFPS: {metric['FPS']:.2f} frames/s")
 
 def detect(save_img=False):
+    initiate_time = time.time()
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
     save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
@@ -68,7 +105,9 @@ def detect(save_img=False):
     old_img_w = old_img_h = imgsz
     old_img_b = 1
 
-    t0 = time.time()
+    detect_start_time = time.time()
+    initiate_times.append(detect_start_time - initiate_time)
+    print(f'\nInitiate_time : {initiate_times[0]:.1f} s')
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -85,11 +124,11 @@ def detect(save_img=False):
                 model(img, augment=opt.augment)[0]
 
         # Inference
-        t1 = time_synchronized()
+        inference_start_time = time_synchronized()
         with torch.no_grad():   # Calculating gradients would cause a GPU memory leak
             pred = model(img, augment=opt.augment)[0].detach()
 
-        t2 = time_synchronized()
+        inference_end_time = time_synchronized()
 
         # Apply NMS
         if "pose" in weights[0]:   # pose model
@@ -97,7 +136,7 @@ def detect(save_img=False):
             output = output_to_keypoint(output)
         else: # detection model
             pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
-        t3 = time_synchronized()
+        nms_end_time = time_synchronized()
 
         # Apply Classifier
         if classify:
@@ -138,14 +177,26 @@ def detect(save_img=False):
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
             
             elif len(det) and ("pose" in weights[0]): #  excute pose estimation                 
-                im0 = letterbox(im0, imgsz, stride=stride, auto=True)[0] 
+                im0 = letterbox(im0, imgsz, stride=stride, auto=True)[0]
                 for idx in range(output.shape[0]):
                     plot_skeleton_kpts(im0, output[idx, 7:].T, 3)
-            t4 = time_synchronized()
+            plot_end_time = time_synchronized()
             
-            # Print time (inference + NMS)
-            time_process = f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (t4 - t3)):.1f}ms) Plot'
-            time_process += f' | FPS : { 1/(t4-t1): .1f} , Latency : {1E3 * (t4-t1):.1f}ms'
+            # Log time (inference + NMS + Plot)
+            inference_time = 1E3 * (inference_end_time - inference_start_time)
+            nms_time = 1E3 * (nms_end_time - inference_end_time)
+            plot_time = 1E3 * (plot_end_time - nms_end_time)
+            inference_times.append(inference_time)
+            nms_times.append(nms_time)
+            plot_times.append(plot_time)
+            
+            # Calculate latency and FPS and record them
+            latency = inference_time + nms_time + plot_time
+            fps_ = 1E3 * (1 / latency)
+            latencies.append(latency)
+            fps_times.append(fps_)
+            time_process = f'{s}Done. ({inference_time:.1f}ms) Inference, ({nms_time:.1f}ms) NMS, ({plot_time:.1f}ms) Plot'
+            time_process += f' | FPS : { fps_ : .1f} , Latency : {latency:.1f}ms'
             print(time_process)
             
             # Stream results
@@ -179,10 +230,11 @@ def detect(save_img=False):
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         #print(f"Results saved to {save_dir}{s}")
 
-    print(f'Done. ({time.time() - t0:.3f}s)')
-
-
+    print(f'Done. ({time.time() - detect_start_time:.3f}s)')
+    log_exp_metric(save_dir=save_dir)
+    
 if __name__ == '__main__':
+    start_time = datetime.datetime.now()
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
@@ -206,10 +258,18 @@ if __name__ == '__main__':
     print(opt)
     #check_requirements(exclude=('pycocotools', 'thop'))
 
-    with torch.no_grad():
-        if opt.update:  # update all models (to fix SourceChangeWarning)
-            for opt.weights in ['yolov7.pt']:
+    # Initialize logfing variables
+    jetson_information = get_jetson_information() # get jetson information 
+    initiate_times, inference_times, nms_times, plot_times,latencies, fps_times = [], [], [], [], [], []
+    
+    try:
+        with torch.no_grad():
+            if opt.update:  # update all models (to fix SourceChangeWarning)
+                for opt.weights in ['yolov7.pt']:
+                    detect()
+                    strip_optimizer(opt.weights)
+            else:
                 detect()
-                strip_optimizer(opt.weights)
-        else:
-            detect()
+        log_exp_summary()
+    except KeyboardInterrupt:
+        log_exp_summary()
