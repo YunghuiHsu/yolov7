@@ -12,15 +12,18 @@ from numpy import random
 import numpy as np
 import pandas as pd
 from jtop import jtop
+import mlflow
+import wandb
 
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages, letterbox
 from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
-    scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path,  non_max_suppression_kpt, save_summary, get_jetson_information
+    scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path,  non_max_suppression_kpt
 from utils.plots import plot_one_box, output_to_keypoint, plot_skeleton_kpts
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
 from utils.logging import get_jetson_information, save_summary 
 
+# -------------- helper functions for logging ------------
 # Save log file
 def log_exp_metric(save_dir:str):
     log_file = save_dir/"log_metric.txt"
@@ -29,31 +32,52 @@ def log_exp_metric(save_dir:str):
         for i in range(len(inference_times)):
             log_file.write(f"{inference_times[i]:.2f}, {nms_times[i]:.2f}, {plot_times[i]:.2f}, {latencies[i]:.2f}, {fps_times[i]:.2f}\n")
 
-def log_exp_summary(): 
+def log_exp_summary():         
     # save Inference_summary
     path_save  = Path(Path(opt.project).parent)/f'Inference_summary.csv'
     save_data = {}
-    metric = {"Inference" : np.round(np.mean(inference_times), 2),
-              "Latency" : np.round(np.mean(latencies), 2),
-              "FPS" : np.round(np.mean(fps_times), 2),
-              "Inf_std" : np.round(np.std(inference_times), 2),
-              "Lat_std" : np.round(np.std(latencies), 2),
-              "FPS_std" : np.round(np.std(fps_times), 2),
-              "Initiate_time" : np.round(initiate_times[0], 2)
-              }
-    save_data.update(metric)
+    metrics = {"Inference" : np.round(np.mean(inference_times), 2),
+            "Latency" : np.round(np.mean(latencies), 2),
+            "FPS" : np.round(np.mean(fps_times), 2),
+            "Inf_std" : np.round(np.std(inference_times), 2),
+            "Lat_std" : np.round(np.std(latencies), 2),
+            "FPS_std" : np.round(np.std(fps_times), 2),
+            "Initiate_time" : np.round(initiate_times[0], 2)
+            }
+    save_data.update(metrics)
     save_data.update(jetson_information)
-    save_data.update(vars(opt))
+    save_data.update(argparse_log)
     save_data["date"] = start_time
 
     save_summary(save_data=save_data, path_save=path_save)
 
     # Display mean and standard deviation of all data
-    print(f"\tInitiate_time : {metric['Initiate_time']:.2f} s")
-    print(f"\tInference: {metric['Inference']:.2f} ms")
-    print(f"\tLatency: {metric['Latency']:.2f} ms")
-    print(f"\tFPS: {metric['FPS']:.2f} frames/s")
+    print(f"\tInitiate_time : {metrics['Initiate_time']:.2f} s")
+    print(f"\tInference: {metrics['Inference']:.2f} ms")
+    print(f"\tLatency: {metrics['Latency']:.2f} ms")
+    print(f"\tFPS: {metrics['FPS']:.2f} frames/s")
+        
+    # Log  
+    try:
+        mlflow.log_params(jetson_information)
+        mlflow.log_params(argparse_log)
+        mlflow.log_metrics(metrics)
+        wandb_logger.log(metrics)
+        wandb_logger.log(jetson_information)
+    except Exception as e:
+        print(f"An error occurred while logging : {e}")
+        
+def resize_demo_imgs(img:np.ndarray=None , scale_size:int = 480):
+    height, width = img.shape[:2]
+    scale = scale_size / max(height, width)
+    new_width, new_height = int(width * scale), int(height * scale)             
+    resized_image = cv2.resize(img, (new_width, new_height))
+    resized_image = cv2.cvtColor(resized_image, cv2.COLOR_RGB2BGR)
+    return resized_image
 
+
+# -------------- helper functions for logging ------------
+     
 def detect(save_img=False):
     initiate_time = time.time()
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
@@ -145,9 +169,9 @@ def detect(save_img=False):
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             if webcam:  # batch_size >= 1
-                p, s, im0, frame = path[i], '%g: ' % i, im0s[i].copy(), dataset.count
+                p, s, im0, frame = path[i], '%g: ' % i, im0s[i].copy(), dataset.count 
             else:
-                p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
+                p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0) # im0s.shape: (h, w, c)
 
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # img.jpg
@@ -209,6 +233,13 @@ def detect(save_img=False):
                 if dataset.mode == 'image':
                     cv2.imwrite(save_path, im0)
                     print(f" The image with the result is saved in: {save_path}")
+                    
+                    if opt.log_exp:
+                        resized_img = resize_demo_imgs(im0, scale_size=960)
+                        caption = f"input size : {opt.img_size} Conf : {opt.conf_thres:.2f}, IOU_thes : {opt.iou_thres:.2f}_{p.stem}"
+                        wandb_logger.log({'demo imgs': wandb.Image(resized_img, caption=caption)})
+                        # mlflow.log_image(resized_img, f'{caption}.png')
+                    
                 else:  # 'video' or 'stream'
                     if vid_path != save_path:  # new video
                         vid_path = save_path
@@ -254,22 +285,40 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
+    parser.add_argument('--log_exp', action='store_true', help='log Experimental metrics')
     opt = parser.parse_args()
     print(opt)
     #check_requirements(exclude=('pycocotools', 'thop'))
 
-    # Initialize logfing variables
+    # --------------Initialize logging------------
     jetson_information = get_jetson_information() # get jetson information 
-    initiate_times, inference_times, nms_times, plot_times,latencies, fps_times = [], [], [], [], [], []
+    initiate_times, inference_times, nms_times, plot_times,latencies, fps_times  = [], [], [], [], [], []
+
+    if opt.log_exp:
+        mlflow.set_tracking_uri("file:/home/yunghui/experiments/mlruns")
+
+        project_name = "Jetson_Infernece_time_Test"
+        # mlflow.create_experiment(project_name)
+        mlflow.set_experiment(project_name)
+        
+        wandb_logger = wandb.init(
+            project=project_name, resume='allow')
+        argparse_log = vars(opt)    # save argparse.Namespace into dictionary
+        wandb_logger.config.update(argparse_log)
+    # --------------Initialize logging------------
     
-    try:
-        with torch.no_grad():
-            if opt.update:  # update all models (to fix SourceChangeWarning)
-                for opt.weights in ['yolov7.pt']:
+    with mlflow.start_run():
+        try:
+            with torch.no_grad():
+                if opt.update:  # update all models (to fix SourceChangeWarning)
+                    for opt.weights in ['yolov7.pt']:
+                        detect()
+                        strip_optimizer(opt.weights)
+                else:
                     detect()
-                    strip_optimizer(opt.weights)
-            else:
-                detect()
-        log_exp_summary()
-    except KeyboardInterrupt:
-        log_exp_summary()
+            if opt.log_exp:
+                log_exp_summary()
+        except KeyboardInterrupt:
+            if opt.log_exp:
+                log_exp_summary()
+        
