@@ -26,6 +26,7 @@ def get_jetson_information()-> dict:
             # Activate jetson_clocks if not already activated
             if not jetson.jetson_clocks:
                 jetson.jetson_clocks = True
+                # jetson.jetson_clocks.status
                 print("jetson_clocks activated")
             # Set nvpmodel to 'MAXN' for maximum power if not already set
             if not jetson.nvpmodel == 'MAXN' :   # Run with max power
@@ -33,8 +34,8 @@ def get_jetson_information()-> dict:
                 print(f'Set nvpmodel to "MAXN" power')
             time.sleep(1)
             # Store the information in a dictionary
-            jetson_information["Nvpmodel"] = jetson.nvpmodel
-            jetson_information["Jetson_Clocks"] = jetson.jetson_clocks 
+            jetson_information["Nvpmodel"] = str(jetson.nvpmodel)
+            jetson_information["Jetson_Clocks"] = str(jetson.jetson_clocks) 
             jetson_information["Module"] = jetson.board['hardware']['Module']
             jetson_information["L4T"] = jetson.board['hardware']['L4T']
             break
