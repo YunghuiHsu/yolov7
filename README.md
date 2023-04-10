@@ -5,12 +5,14 @@
 
 See [keypoint.ipynb](https://github.com/WongKinYiu/yolov7/blob/main/tools/keypoint.ipynb).
 
+
 <div align="center">
     <a href="./">
         <img src="./figure/pose.png" width="39%"/>
     </a>
 </div>
 
+### update note
 - Add the function of logging performance during inference
 
     git switch to "log_metric" branch 
@@ -39,23 +41,28 @@ See [keypoint.ipynb](https://github.com/WongKinYiu/yolov7/blob/main/tools/keypoi
 
 ###  Inference for Pose estimation
 
-- On the video:
+- Download yolov7-w6-pose.pt
 ```
-python detect_pose.py --weights yolov7-w6-pose.pt --conf 0.05 --iou-thres 0.65 --img-size 640 --source yourvideo.mp4 --no-trace --log_exp
-```
-
-- On the image:
-```
-python detect_pose.py --weights yolov7-w6-pose.pt --conf 0.05 --iou-thres 0.65 --img-size 640 --source inference/images/horses.jpg --no-trace --log_exp
+wget https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-w6-pose.pt
 ```
 
-- On the webcam:  
+#### On the video:
+```
+python3 detect_pose.py --weights yolov7-w6-pose.pt --conf 0.05 --iou-thres 0.65 --img-size 640 --source yourvideo.mp4 --no-trace --log_exp
+```
+
+#### On the image:
+```
+python3 detect_pose.py --weights yolov7-w6-pose.pt --conf 0.05 --iou-thres 0.65 --img-size 640 --source inference/images/horses.jpg --no-trace --log_exp
+```
+
+#### On the webcam:  
     add `0` after --source
 ```
-python detect_pose.py --weights yolov7-w6-pose.pt --conf 0.05 --iou-thres 0.65 --img-size 640 --source 0 --no-trace --log_exp
+python3 detect_pose.py --weights yolov7-w6-pose.pt --conf 0.05 --iou-thres 0.65 --img-size 640 --source 0 --no-trace --log_exp
 ```
 
-#### Test
+#### Demo
 
 - Crowded multi-person scenes
 <div align="center">
