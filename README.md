@@ -12,7 +12,7 @@ See [keypoint.ipynb](https://github.com/WongKinYiu/yolov7/blob/main/tools/keypoi
     </a>
 </div>
 
-### update note
+### Update note
 - Add the function of logging performance during inference
 
     git switch to "log_metric" branch 
@@ -21,7 +21,7 @@ See [keypoint.ipynb](https://github.com/WongKinYiu/yolov7/blob/main/tools/keypoi
     git checkout -b log_metric  origin/log_metric
     ```
 
-     When running the python command in the terminal, add `--log_exp` and it will start logging the values of inference time, FPS, Latency and hyperparameters, which requires the libraries for wandb and mlflow to be installed.
+     When running the python command in the terminal, add `--log_exp` and it will start logging the values of inference time, FPS, Latency and hyperparameters, which requires the libraries for `wandb` and `mlflow` to be installed.
 
 
 - Add support for "pose estimation" from the official YOLOv7 repository
@@ -36,7 +36,10 @@ See [keypoint.ipynb](https://github.com/WongKinYiu/yolov7/blob/main/tools/keypoi
 
     `detect_pose.py`修改自`detect.py`，在原`detect.py`架構中加入了對 "姿勢估計 "的支持，沒有修改、添加任何`utils`文件。直接下載並可直接使用
 
-關於環境設置和相依套件的安裝，請參考YOLOv7的官方資源庫
+
+### Install 
+    Please refer to the official YOLOv7 repository for environment settings and dependency package installation.
+    關於環境設置和相依套件的安裝，請參考YOLOv7的官方資源庫
 
 
 ###  Inference for Pose estimation
