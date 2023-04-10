@@ -36,32 +36,24 @@ def log_exp_summary():
     # save Inference_summary
     path_save  = Path(Path(opt.project).parent)/f'Inference_summary.csv'
     save_data = {}
-    metrics = {"Inference" : np.round(np.mean(inference_times), 2),
-            "Latency" : np.round(np.mean(latencies), 2),
-            "FPS" : np.round(np.mean(fps_times), 2),
-            "Inf_std" : np.round(np.std(inference_times), 2),
-            "Lat_std" : np.round(np.std(latencies), 2),
-            "FPS_std" : np.round(np.std(fps_times), 2),
-            "Initiate_time" : np.round(initiate_times[0], 2)
-            }
+    metrics = log_metrics(display=False)
+    try:
+        jetson_information
+    except NameError:
+        jetson_information = {}
+    
     save_data.update(metrics)
     save_data.update(jetson_information)
     save_data.update(argparse_log)
     save_data["date"] = start_time
-
     save_summary(save_data=save_data, path_save=path_save)
 
-    # Display mean and standard deviation of all data
-    print(f"\tInitiate_time : {metrics['Initiate_time']:.2f} s")
-    print(f"\tInference: {metrics['Inference']:.2f} ms")
-    print(f"\tLatency: {metrics['Latency']:.2f} ms")
-    print(f"\tFPS: {metrics['FPS']:.2f} frames/s")
-        
     # Log  
     try:
-        mlflow.log_params(jetson_information)
-        mlflow.log_params(argparse_log)
-        mlflow.log_metrics(metrics)
+        with mlflow.start_run():
+            mlflow.log_params(jetson_information)
+            mlflow.log_params(argparse_log)
+            mlflow.log_metrics(metrics)
         wandb_logger.log(metrics)
         wandb_logger.log(jetson_information)
     except Exception as e:
@@ -74,6 +66,23 @@ def resize_demo_imgs(img:np.ndarray=None , scale_size:int = 480):
     resized_image = cv2.resize(img, (new_width, new_height))
     resized_image = cv2.cvtColor(resized_image, cv2.COLOR_RGB2BGR)
     return resized_image
+
+
+def log_metrics(display:bool=True)->dict:
+    metrics = {"Inference" : np.round(np.mean(inference_times), 2),
+        "Latency" : np.round(np.mean(latencies), 2),
+        "FPS" : np.round(np.mean(fps_times), 2),
+        "Inf_std" : np.round(np.std(inference_times), 2),
+        "Lat_std" : np.round(np.std(latencies), 2),
+        "FPS_std" : np.round(np.std(fps_times), 2),
+        "Initiate_time" : np.round(initiate_times[0], 2)
+        }
+    if display:
+        print(f"\tInitiate_time : {metrics['Initiate_time']:.2f} s")
+        print(f"\tInference: {metrics['Inference']:.2f} ms")
+        print(f"\tLatency: {metrics['Latency']:.2f} ms")
+        print(f"\tFPS: {metrics['FPS']:.2f} frames/s")
+    return metrics
 
 
 # -------------- helper functions for logging ------------
@@ -97,7 +106,7 @@ def detect(save_img=False):
     # Load model
     model = attempt_load(weights, map_location=device)  # load FP32 model
     stride = int(model.stride.max())  # model stride
-    imgsz = check_img_size(imgsz, s=stride)  # check img_size
+    imgsz = check_img_size(imgsz, s=stride)  # check img_size 
     if trace:
         model = TracedModel(model, device, opt.img_size)
 
@@ -263,6 +272,7 @@ def detect(save_img=False):
 
     print(f'Done. ({time.time() - detect_start_time:.3f}s)')
     log_exp_metric(save_dir=save_dir)
+    log_metrics(display=True)
     
 if __name__ == '__main__':
     start_time = datetime.datetime.now()
@@ -291,34 +301,37 @@ if __name__ == '__main__':
     #check_requirements(exclude=('pycocotools', 'thop'))
 
     # --------------Initialize logging------------
-    jetson_information = get_jetson_information() # get jetson information 
     initiate_times, inference_times, nms_times, plot_times,latencies, fps_times  = [], [], [], [], [], []
-
+    argparse_log = vars(opt)    # save argparse.Namespace into dictionary
+    try:
+        jetson_information = get_jetson_information() # get jetson information 
+    except Exception as e:
+        print(f"Jetson setting error: {e}")
+    
     if opt.log_exp:
-        mlflow.set_tracking_uri("file:/home/yunghui/experiments/mlruns")
-
-        project_name = "Jetson_Infernece_time_Test"
-        # mlflow.create_experiment(project_name)
-        mlflow.set_experiment(project_name)
-        
-        wandb_logger = wandb.init(
-            project=project_name, resume='allow')
-        argparse_log = vars(opt)    # save argparse.Namespace into dictionary
-        wandb_logger.config.update(argparse_log)
+        try:
+            # mlflow.set_tracking_uri("file:/home/yunghui/experiments/mlruns")
+            project_name = "Jetson_Infernece_time_Test"
+            # mlflow.create_experiment(project_name)
+            mlflow.set_experiment(project_name)
+            wandb_logger = wandb.init(project=project_name, resume='allow')
+            wandb_logger.config.update(argparse_log)
+        except Exception as e:
+            print(f"Initialize logging : {e}")
     # --------------Initialize logging------------
     
-    with mlflow.start_run():
-        try:
-            with torch.no_grad():
-                if opt.update:  # update all models (to fix SourceChangeWarning)
-                    for opt.weights in ['yolov7.pt']:
-                        detect()
-                        strip_optimizer(opt.weights)
-                else:
+    
+    try:
+        with torch.no_grad():
+            if opt.update:  # update all models (to fix SourceChangeWarning)
+                for opt.weights in ['yolov7.pt']:
                     detect()
-            if opt.log_exp:
-                log_exp_summary()
-        except KeyboardInterrupt:
-            if opt.log_exp:
-                log_exp_summary()
+                    strip_optimizer(opt.weights)
+            else:
+                detect()
+        if opt.log_exp:
+            log_exp_summary()
+    except KeyboardInterrupt:
+        if opt.log_exp:
+            log_exp_summary()
         
