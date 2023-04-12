@@ -149,7 +149,7 @@ def detect(save_img=False):
             print(time_process)
             
             # Stream results
-            if dataset.mode != 'image': # 'video' or 'stream'
+            if view_img:
                 cv2.imshow(str(p), im0)
                 cv2.waitKey(1)  # 1 millisecond
 
