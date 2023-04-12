@@ -1,21 +1,23 @@
-# Usage: pip install -r requirements.txt
+# Usage: sudo pip3 install -r requirements.txt
+
 
 # Base ----------------------------------------
 matplotlib>=3.2.2
 numpy>=1.18.5,<1.24.0
-opencv-python>=4.1.1
+# opencv-python>=4.1.1         # If you are using a Jetson5 device (Arm64) and have Jetpack installed, please comment out
 Pillow>=7.1.2
 PyYAML>=5.3.1
 requests>=2.23.0
 scipy>=1.4.1
-torch>=1.7.0,!=1.12.0
-torchvision>=0.8.1,!=0.13.0
+# torch>=1.7.0,!=1.12.0        #  If you are using a Jetson5 device (Arm64) and have Jetpack installed, please comment out
+# torchvision>=0.8.1,!=0.13.0  #  If you are using a Jetson5 device (Arm64) and have Jetpack installed, please comment out
 tqdm>=4.41.0
 protobuf<4.21.3
 
 # Logging -------------------------------------
-tensorboard>=2.4.1
-# wandb
+# tensorboard>=2.4.1
+wandb
+mlflow
 
 # Plotting ------------------------------------
 pandas>=1.1.4
@@ -37,3 +39,4 @@ thop  # FLOPs computation
 # albumentations>=1.0.3
 # pycocotools>=2.0  # COCO mAP
 # roboflow
+jetson-stats
