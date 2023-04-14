@@ -150,8 +150,11 @@ def detect(save_img=False):
             
             # Stream results
             if dataset.mode != 'image': # 'video' or 'stream'
-                cv2.imshow(str(p), im0)
-                cv2.waitKey(1)  # 1 millisecond
+                try:
+                    cv2.imshow(str(p), im0)
+                    cv2.waitKey(1)  # 1 millisecond
+                except Exception as e:
+                    print(f"An error occurred while real-time playing : {e}")
 
             # Save results (image with detections)
             if save_img:
